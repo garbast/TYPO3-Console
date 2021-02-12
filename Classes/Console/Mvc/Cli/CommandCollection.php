@@ -15,10 +15,11 @@ namespace Helhum\Typo3Console\Mvc\Cli;
  */
 
 use Helhum\Typo3Console\Core\Booting\RunLevel;
-use Helhum\Typo3Console\Mvc\Cli\Symfony\Command\CommandControllerCommand;
+use Helhum\Typo3Console\Mvc\Cli\Symfony\Command\ErroredCommand;
 use Symfony\Component\Console\Command\Command as BaseCommand;
 use Symfony\Component\Console\CommandLoader\CommandLoaderInterface;
 use Symfony\Component\Console\Exception\CommandNotFoundException;
+use Symfony\Component\Console\Exception\RuntimeException;
 use TYPO3\CMS\Core\Console\CommandNameAlreadyInUseException;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 
@@ -31,17 +32,12 @@ use TYPO3\CMS\Core\Utility\GeneralUtility;
 class CommandCollection implements CommandLoaderInterface
 {
     /**
-     * @var RunLevel
-     */
-    private $runLevel;
-
-    /**
      * @var CommandConfiguration
      */
     private $commandConfiguration;
 
     /**
-     * @var BaseCommand[]
+     * @var array|BaseCommand[]
      */
     private $commands = [];
 
@@ -50,12 +46,16 @@ class CommandCollection implements CommandLoaderInterface
      */
     private $replaces = [];
 
-    public function __construct(RunLevel $runLevel, CommandConfiguration $commandConfiguration)
+    /**
+     * @var Typo3CommandRegistry
+     */
+    private $typo3CommandRegistry;
+
+    public function __construct(CommandConfiguration $commandConfiguration, Typo3CommandRegistry $typo3CommandRegistry)
     {
-        $this->runLevel = $runLevel;
         $this->commandConfiguration = $commandConfiguration;
+        $this->typo3CommandRegistry = $typo3CommandRegistry;
         $this->populateCommands();
-        $this->initializeRunLevel();
     }
 
     /**
@@ -94,7 +94,8 @@ class CommandCollection implements CommandLoaderInterface
 
     /**
      * @param string $name
-     * @throws \Symfony\Component\Console\Exception\CommandNotFoundException
+     * @throws CommandNotFoundException
+     * @throws \Throwable
      * @return BaseCommand
      */
     public function get($name): BaseCommand
@@ -102,21 +103,48 @@ class CommandCollection implements CommandLoaderInterface
         if (!isset($this->commands[$name])) {
             throw new CommandNotFoundException(sprintf('The command "%s" does not exist.', $name), [], 1518812618);
         }
-        $commandConfig = $this->commands[$name];
-        if (isset($commandConfig['controller'])) {
-            $command = GeneralUtility::makeInstance(CommandControllerCommand::class, $commandConfig['name'], new Command($commandConfig['controller'], $commandConfig['controllerCommandName']), $commandConfig['lateCommand'] ?? false);
-        } elseif (isset($commandConfig['class'])) {
-            /** @var BaseCommand $command */
-            $command = GeneralUtility::makeInstance($commandConfig['class'], $commandConfig['name']);
-        } else {
-            throw new CommandNotFoundException(sprintf('The command "%s" does not exist.', $name), [], 1520205204);
+        if ($this->commands[$name] instanceof BaseCommand) {
+            return $this->commands[$name];
         }
-
-        if (!empty($this->commands[$name]['aliases'])) {
-            $command->setAliases($this->commands[$name]['aliases']);
+        $command = $this->createInstance($name);
+        $this->commands[$name] = $command;
+        foreach ($command->getAliases() as $alias) {
+            $this->commands[$alias] = $command;
         }
 
         return $command;
+    }
+
+    private function createInstance(string $name): BaseCommand
+    {
+        try {
+            if ($this->commands[$name]['service']) {
+                $command = $this->typo3CommandRegistry->get($name);
+
+                return $command;
+            }
+            if (isset($this->commands[$name]['class'])) {
+                /** @var BaseCommand $command */
+                $command = GeneralUtility::makeInstance($this->commands[$name]['class'], $this->commands[$name]['name']);
+
+                return $command;
+            }
+        } catch (\Throwable $e) {
+            // There might be some edge cases where creating the object fails
+            // Create a dummy command, which is disabled for that case
+            // In Application we check for that and show an error accordingly,
+            // but we do not interfere with other commands
+            $command = new ErroredCommand($this->commands[$name]['name'], $e);
+
+            return $command;
+        } finally {
+            if (isset($command) && !$this->commands[$name]['service']) {
+                // Aliases have been set during dependency injection container object creation already,
+                // but set them for other cases here
+                $command->setAliases($this->commands[$name]['aliases']);
+            }
+        }
+        throw new CommandNotFoundException(sprintf('The command "%s" does not exist. No class defined.', $name), [], 1520205204);
     }
 
     /**
@@ -136,51 +164,63 @@ class CommandCollection implements CommandLoaderInterface
         return array_keys($this->commands);
     }
 
-    public function addCommandControllerCommands(array $commandControllers)
+    private function populateCommands(): void
     {
-        $this->populateCommands($this->commandConfiguration->addCommandControllerCommands($commandControllers));
-    }
-
-    private function populateCommands(array $definitions = null)
-    {
-        $definitions = $definitions ?? $this->commandConfiguration->getCommandDefinitions();
-        $this->extractReplaces($definitions);
+        $definitions = array_merge($this->commandConfiguration->getCommandDefinitions(), $this->getTypo3ServiceDefinitions(), $this->typo3CommandRegistry->getCommandConfiguration());
+        $this->replaces = $this->commandConfiguration->getReplaces();
         foreach ($definitions as $commandConfig) {
             $this->add($commandConfig);
         }
     }
 
-    private function extractReplaces(array $definitions)
+    private function getTypo3ServiceDefinitions(): array
     {
-        $replaces = [];
-        foreach ($definitions as $commandConfiguration) {
-            if (isset($commandConfiguration['replace'])) {
-                $replaces[] = $commandConfiguration['replace'];
-            }
+        $definitions = [];
+        foreach ($this->typo3CommandRegistry->getServiceConfiguration() as $commandName => $commandConfig) {
+            $definitions[] = [
+                'name' => $commandName,
+                'vendor' => $commandName,
+                'nameSpacedName' => $commandName,
+                'class' => $commandConfig['class'],
+                'service' => true,
+            ];
         }
-        $this->replaces = array_merge($this->replaces, ...$replaces);
+
+        return $definitions;
     }
 
-    private function initializeRunLevel()
+    /**
+     * @param RunLevel $runLevel
+     * @internal
+     */
+    public function initializeRunLevel(Runlevel $runLevel): void
     {
         foreach ($this->commands as $name => $commandConfig) {
             if (isset($commandConfig['runLevel'])) {
-                $this->runLevel->setRunLevelForCommand($name, $commandConfig['runLevel']);
+                $runLevel->setRunLevelForCommand($name, $commandConfig['runLevel']);
             }
             if (isset($commandConfig['bootingSteps'])) {
                 foreach ($commandConfig['bootingSteps'] as $bootingStep) {
-                    $this->runLevel->addBootingStepForCommand($name, $bootingStep);
+                    $runLevel->addBootingStepForCommand($name, $bootingStep);
                 }
             }
         }
     }
 
-    private function add(array $commandConfig)
+    private function add(array $commandConfig): void
     {
         $finalCommandName = $commandConfig['name'];
-        if (in_array($commandConfig['name'], $this->replaces, true)
-            || in_array($commandConfig['nameSpacedName'], $this->replaces, true)
+        if (isset($this->commands[$finalCommandName])
+            && $this->commands[$finalCommandName]['service']
+            && $this->commands[$finalCommandName]['class'] === $commandConfig['class']
         ) {
+            if (isset($commandConfig['runLevel'])) {
+                throw new RuntimeException(sprintf('Command "%s" is registered as service. Setting runLevel via configuration is not supported in that case.', $finalCommandName), 1589019018);
+            }
+            // Command is also registered as service. Ignoring legacy registration
+            return;
+        }
+        if (in_array($commandConfig['class'], $this->replaces, true)) {
             return;
         }
         if (isset($this->commands[$finalCommandName])) {

@@ -53,16 +53,18 @@ class DatabaseCommandControllerTest extends AbstractCommandTest
      */
     public function addingAndRemovingFieldsAndTablesIncludingVerbositySwitchWork()
     {
-        $this->installFixtureExtensionCode('ext_test');
-        $this->executeConsoleCommand('install:generatepackagestates', ['--activate-default']);
+        self::installFixtureExtensionCode('ext_test');
+        try {
+            $this->executeConsoleCommand('install:generatepackagestates', ['--activate-default']);
 
-        $output = $this->executeConsoleCommand('database:updateschema', ['*', '--verbose']);
+            $output = $this->executeConsoleCommand('database:updateschema', ['*', '--verbose']);
 
-        $this->assertContains('The following database schema updates were performed:', $output);
-        $this->assertContains('Change fields', $output);
-        $this->assertContains('Add tables', $output);
-
-        $this->removeFixtureExtensionCode('ext_test');
+            $this->assertContains('The following database schema updates were performed:', $output);
+            $this->assertContains('Change fields', $output);
+            $this->assertContains('Add tables', $output);
+        } finally {
+            self::removeFixtureExtensionCode('ext_test');
+        }
         $this->executeConsoleCommand('install:generatepackagestates', ['--activate-default']);
 
         $output = $this->executeConsoleCommand('database:updateschema', ['*', '--verbose']);
@@ -88,18 +90,16 @@ class DatabaseCommandControllerTest extends AbstractCommandTest
      */
     public function databaseSchemaCanBeUpdatedWithExtensionsAccessingDatabaseCaches()
     {
-        $this->installFixtureExtensionCode('ext_test_cache');
+        self::installFixtureExtensionCode('ext_test_cache');
         $this->executeConsoleCommand('install:generatepackagestates', ['--activate-default']);
-        $this->executeMysqlQuery('DROP TABLE IF EXISTS `cf_cache_rootline`');
-        $this->executeMysqlQuery('DROP TABLE IF EXISTS `cf_extbase_datamapfactory_datamap`');
-
-        $output = $this->executeConsoleCommand('database:updateschema', ['--verbose']);
-
-        $this->assertContains('CREATE TABLE `cf_cache_rootline`', $output);
-        $this->assertContains('CREATE TABLE `cf_extbase_datamapfactory_datamap`', $output);
-
-        $this->removeFixtureExtensionCode('ext_test_cache');
-        $this->executeConsoleCommand('install:generatepackagestates', ['--activate-default']);
+        $this->executeMysqlQuery('DROP TABLE IF EXISTS `cache_rootline`');
+        try {
+            $output = $this->executeConsoleCommand('database:updateschema', ['--verbose']);
+            $this->assertContains('CREATE TABLE `cache_rootline`', $output);
+        } finally {
+            self::removeFixtureExtensionCode('ext_test_cache');
+            $this->executeConsoleCommand('install:generatepackagestates', ['--activate-default']);
+        }
     }
 
     /**
@@ -133,7 +133,7 @@ class DatabaseCommandControllerTest extends AbstractCommandTest
      */
     public function schemaUpdateShowsErrorMessageIfTheyOccur()
     {
-        $this->installFixtureExtensionCode('ext_broken_sql');
+        self::installFixtureExtensionCode('ext_broken_sql');
         $this->executeConsoleCommand('install:generatepackagestates', ['--activate-default']);
         try {
             $output = $this->commandDispatcher->executeCommand('database:updateschema', ['*']);
@@ -149,7 +149,7 @@ class DatabaseCommandControllerTest extends AbstractCommandTest
         }
         $this->assertContains('The following errors occurred:', $output);
         $this->assertContains('SQL Statement', $output);
-        $this->removeFixtureExtensionCode('ext_broken_sql');
+        self::removeFixtureExtensionCode('ext_broken_sql');
         $this->executeConsoleCommand('install:generatepackagestates', ['--activate-default']);
     }
 

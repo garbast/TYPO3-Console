@@ -25,6 +25,8 @@ namespace Typo3Console\CreateReferenceCommand\Command;
  *                                                                        */
 
 use Helhum\Typo3Console\Command\RelatableCommandInterface;
+use Helhum\Typo3Console\Mvc\Cli\CommandCollection;
+use Helhum\Typo3Console\Mvc\Cli\CommandConfiguration;
 use Helhum\Typo3Console\Mvc\Cli\Symfony\Application;
 use Symfony\Component\Console\Descriptor\ApplicationDescription;
 use Symfony\Component\Console\Input\InputArgument;
@@ -32,7 +34,9 @@ use Symfony\Component\Console\Input\InputDefinition;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
+use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Fluid\View\StandaloneView;
+use Typo3Console\CreateReferenceCommand\EmptyTypo3CommandRegistry;
 
 /**
  * "Command Reference" command controller for the Documentation package.
@@ -41,23 +45,13 @@ use TYPO3\CMS\Fluid\View\StandaloneView;
 class CommandReferenceRenderCommand extends \Symfony\Component\Console\Command\Command
 {
     private $skipCommands = [
-        'cache:flushcomplete',
-        'commandreference:render',
-        'convert-command-controller',
-        'install:actionneedsexecution',
-        'install:databaseconnect',
-        'install:databasedata',
-        'install:databaseselect',
-        'install:defaultconfiguration',
-        'install:environmentandfolders',
-        'language:update',
         'server:run',
-        'swiftmailer:spool:send',
-        'site:list',
-        'site:show',
-        'upgrade:checkextensioncompatibility',
-        'upgrade:subprocess',
     ];
+
+    public function isEnabled()
+    {
+        return getenv('TYPO3_CONSOLE_RENDERING_REFERENCE') === false;
+    }
 
     protected function configure()
     {
@@ -93,7 +87,33 @@ class CommandReferenceRenderCommand extends \Symfony\Component\Console\Command\C
     {
         putenv('TYPO3_CONSOLE_RENDERING_REFERENCE=1');
         $_SERVER['PHP_SELF'] = Application::COMMAND_NAME;
-        $application = $this->getApplication();
+        $commandReferenceDir = getenv('TYPO3_PATH_COMPOSER_ROOT') . '/Documentation/CommandReference/';
+        GeneralUtility::rmdir($commandReferenceDir, true);
+        GeneralUtility::mkdir($commandReferenceDir);
+        $commandCollection = new CommandCollection(new CommandConfiguration(), new EmptyTypo3CommandRegistry());
+        $application = new class($this->getApplication()) extends \Symfony\Component\Console\Application {
+            /**
+             * @var Application
+             */
+            private $application;
+
+            public function __construct(Application $application, string $name = 'UNKNOWN', string $version = 'UNKNOWN')
+            {
+                parent::__construct($name, $version);
+                $this->application = $application;
+            }
+
+            protected function getDefaultInputDefinition()
+            {
+                return $this->application->getDefaultInputDefinition();
+            }
+
+            protected function getDefaultCommands()
+            {
+                return $this->application->getDefaultCommands();
+            }
+        };
+        $application->setCommandLoader($commandCollection);
         $applicationDescription = new ApplicationDescription($application, null, true);
         $commands = $applicationDescription->getCommands();
         $allCommands = [];
@@ -161,7 +181,7 @@ class CommandReferenceRenderCommand extends \Symfony\Component\Console\Command\C
             $standaloneView->setTemplatePathAndFilename($templatePathAndFilename);
             $standaloneView->assignMultiple(['command' => $allCommands[$command->getName()]]);
 
-            $renderedOutputFile = getenv('TYPO3_PATH_COMPOSER_ROOT') . '/Documentation/CommandReference/' . $allCommands[$command->getName()]['docDirectory'] . '.rst';
+            $renderedOutputFile = $commandReferenceDir . $allCommands[$command->getName()]['docDirectory'] . '.rst';
             file_put_contents($renderedOutputFile, $standaloneView->render());
         }
 

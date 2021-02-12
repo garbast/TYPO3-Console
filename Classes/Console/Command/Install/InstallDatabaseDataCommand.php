@@ -49,6 +49,11 @@ class InstallDatabaseDataCommand extends Command
         );
     }
 
+    public function isEnabled()
+    {
+        return getenv('TYPO3_CONSOLE_RENDERING_REFERENCE') === false;
+    }
+
     protected function execute(InputInterface $input, OutputInterface $output)
     {
         $adminUserName = $input->getOption('admin-user-name');
@@ -72,5 +77,7 @@ class InstallDatabaseDataCommand extends Command
             false,
             OutputInterface::OUTPUT_RAW
         );
+
+        return 0;
     }
 }

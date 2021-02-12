@@ -14,12 +14,12 @@ namespace Helhum\Typo3Console\Command\Database;
  *
  */
 
-use Helhum\Typo3Console\Command\AbstractConvertedCommand;
 use Helhum\Typo3Console\Database\Schema\SchemaUpdate;
 use Helhum\Typo3Console\Database\Schema\SchemaUpdateResultRenderer;
 use Helhum\Typo3Console\Database\Schema\SchemaUpdateType;
 use Helhum\Typo3Console\Mvc\Cli\ConsoleOutput;
 use Helhum\Typo3Console\Service\Database\SchemaService;
+use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -28,7 +28,7 @@ use TYPO3\CMS\Core\Type\Exception\InvalidEnumerationValueException;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Extbase\SignalSlot\Dispatcher;
 
-class DatabaseUpdateSchemaCommand extends AbstractConvertedCommand
+class DatabaseUpdateSchemaCommand extends Command
 {
     protected function configure()
     {
@@ -59,40 +59,27 @@ The list of schema update types supports wildcards to specify multiple types, e.
 
 To avoid shell matching all types with wildcards should be quoted.
 
-<b>Example:</b> <code>%command.full_name% "*.add,*.change"</code>
+<b>Example:</b>
+
+  <code>%command.full_name% "*.add,*.change"</code>
 EOH
         );
-        /** @deprecated Will be removed with 6.0 */
-        $this->setDefinition($this->createCompleteInputDefinition());
-    }
-
-    /**
-     * @deprecated Will be removed with 6.0
-     */
-    protected function createNativeDefinition(): array
-    {
-        return [
-            new InputArgument(
-                'schemaUpdateTypes',
-                InputArgument::OPTIONAL,
-                'List of schema update types (default: "safe")',
-                'safe'
-            ),
-            new InputOption(
-                'dry-run',
-                '',
-                InputOption::VALUE_NONE,
-                'If set the updates are only collected and shown, but not executed'
-            ),
-        ];
-    }
-
-    /**
-     * @deprecated will be removed with 6.0
-     */
-    protected function handleDeprecatedArgumentsAndOptions(InputInterface $input, OutputInterface $output)
-    {
-        // nothing to do here
+        $this->setDefinition(
+            [
+                new InputArgument(
+                    'schemaUpdateTypes',
+                    InputArgument::OPTIONAL,
+                    'List of schema update types',
+                    'safe'
+                ),
+                new InputOption(
+                    'dry-run',
+                    '',
+                    InputOption::VALUE_NONE,
+                    'If set the updates are only collected and shown, but not executed'
+                ),
+            ]
+        );
     }
 
     protected function execute(InputInterface $input, OutputInterface $output)

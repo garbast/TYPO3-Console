@@ -15,13 +15,13 @@ namespace Helhum\Typo3Console\Command\Install;
  */
 
 use Helhum\Typo3Console\Command\AbstractConvertedCommand;
-use Helhum\Typo3Console\Core\Booting\CompatibilityScripts;
 use Helhum\Typo3Console\Install\Action\InstallActionDispatcher;
 use Helhum\Typo3Console\Mvc\Cli\ConsoleOutput;
 use Helhum\Typo3Console\Mvc\Cli\Symfony\Input\ArgvInput;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
+use TYPO3\CMS\Core\Core\Environment;
 
 class InstallSetupCommand extends AbstractConvertedCommand
 {
@@ -173,6 +173,13 @@ EOH
                 'no'
             ),
             new InputOption(
+                'site-base-url',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'When `site-setup-type` is set to `site`, this base url is used for the created site configuration',
+                '/'
+            ),
+            new InputOption(
                 'non-interactive',
                 null,
                 InputOption::VALUE_NONE,
@@ -217,7 +224,7 @@ EOH
                 'integrityCheck' => !$skipIntegrityCheck,
                 'forceInstall' => $force,
                 'interactive' => $isInteractive,
-                'extensionSetup' => !$skipExtensionSetup && CompatibilityScripts::isComposerMode(),
+                'extensionSetup' => !$skipExtensionSetup && Environment::isComposerMode(),
             ],
             $installStepsConfig
         );

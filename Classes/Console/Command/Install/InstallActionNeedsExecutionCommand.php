@@ -33,6 +33,11 @@ class InstallActionNeedsExecutionCommand extends Command
         );
     }
 
+    public function isEnabled()
+    {
+        return getenv('TYPO3_CONSOLE_RENDERING_REFERENCE') === false;
+    }
+
     protected function execute(InputInterface $input, OutputInterface $output)
     {
         $actionName = $input->getArgument('actionName');
@@ -40,5 +45,7 @@ class InstallActionNeedsExecutionCommand extends Command
             new SilentConfigurationUpgrade()
         );
         $output->write(serialize($installStepActionExecutor->executeActionWithArguments($actionName, [], true)), false, OutputInterface::OUTPUT_RAW);
+
+        return 0;
     }
 }

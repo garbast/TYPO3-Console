@@ -14,6 +14,7 @@
     verbose="true"
 >
     <php>
+        <env name="TYPO3_CONSOLE_TEST_RUN" value="1" />
         <env name="TYPO3_INSTALL_DB_USER" value="root" />
         <env name="TYPO3_INSTALL_DB_HOST" value="127.0.0.1" />
         <env name="TYPO3_INSTALL_DB_PASSWORD" value="" />
@@ -22,9 +23,7 @@
         <env name="TYPO3_INSTALL_ADMIN_PASSWORD" value="password" />
         <env name="TYPO3_INSTALL_SITE_NAME" value="Travis Install" />
         <env name="TYPO3_INSTALL_WEB_SERVER_SETUP_TYPE" value="none" />
-        <env name="TYPO3_INSTALL_SITE_SETUP_TYPE" value="createsite" />
-        <env name="TYPO3_VERSION" value="~9.5.8" />
-        <env name="TYPO3_UPGRADE_FROM_VERSION" value="~8.7.22" />
+        <env name="TYPO3_INSTALL_SITE_SETUP_TYPE" value="site" />
     </php>
     <testsuites>
         <testsuite name="TYPO3 Console Unit Tests">

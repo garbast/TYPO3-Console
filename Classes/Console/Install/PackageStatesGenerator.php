@@ -15,6 +15,7 @@ namespace Helhum\Typo3Console\Install;
  */
 
 use Helhum\Typo3Console\Package\UncachedPackageManager;
+use TYPO3\CMS\Core\Core\Environment;
 use TYPO3\CMS\Core\Package\PackageInterface;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Core\Utility\PathUtility;
@@ -30,13 +31,20 @@ class PackageStatesGenerator
     private $packageManager;
 
     /**
+     * @var bool
+     */
+    private $isComposerMode;
+
+    /**
      * PackageStatesGenerator constructor.
      *
      * @param UncachedPackageManager $packageManager
+     * @param bool|null $isComposerMode
      */
-    public function __construct(UncachedPackageManager $packageManager)
+    public function __construct(UncachedPackageManager $packageManager, bool $isComposerMode = null)
     {
         $this->packageManager = $packageManager;
+        $this->isComposerMode = $isComposerMode ?? Environment::isComposerMode();
     }
 
     /**
@@ -47,12 +55,13 @@ class PackageStatesGenerator
      */
     public function generate(array $frameworkExtensionsToActivate = [], array $excludedExtensions = [], $activateDefaultExtensions = false)
     {
-        $this->ensureDirectoryExists(PATH_site . 'typo3conf');
+        $this->ensureDirectoryExists(Environment::getPublicPath() . '/typo3conf');
         $this->packageManager->scanAvailablePackages();
+        $allFrameWorkExtensions = $this->isComposerMode && $frameworkExtensionsToActivate === [];
         foreach ($this->packageManager->getAvailablePackages() as $package) {
             $extKey = $package->getPackageKey();
             $isLocalExt = strpos(PathUtility::stripPathSitePrefix($package->getPackagePath()), 'typo3conf/ext/') !== false;
-            $isFrameWorkExtToActivate = in_array($extKey, $frameworkExtensionsToActivate, true);
+            $isFrameWorkExtToActivate = (!$isLocalExt && $allFrameWorkExtensions) || in_array($extKey, $frameworkExtensionsToActivate, true);
             $isExcludedExt = in_array($extKey, $excludedExtensions, true);
             $isFactoryDefault = $activateDefaultExtensions && $package->isPartOfFactoryDefault();
             $isRequiredFrameworkExt = $isFrameWorkExtToActivate || $package->isProtected() || $package->isPartOfMinimalUsableSystem();

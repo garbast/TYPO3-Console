@@ -46,20 +46,31 @@ EOH
             'Specify the setup type: Create empty root page (site), Do nothing (no)',
             'no'
         );
+        $this->addOption(
+            'site-base-url',
+            null,
+            InputOption::VALUE_REQUIRED,
+            'When `site-setup-type` is set to `site`, this base url is used for the created site configuration',
+            '/'
+        );
+    }
+
+    public function isEnabled()
+    {
+        return getenv('TYPO3_CONSOLE_RENDERING_REFERENCE') === false;
     }
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
         $siteSetupType = $input->getOption('site-setup-type');
-
+        $arguments['siteUrl'] = $input->getOption('site-base-url');
         switch ($siteSetupType) {
             case 'site':
-            case 'createsite':
-                $arguments = ['sitesetup' => 'createsite'];
+                $arguments['sitesetup'] = 'createsite';
                 break;
             case 'no':
             default:
-                $arguments = ['sitesetup' => 'none'];
+                $arguments['sitesetup'] = 'none';
         }
 
         $installStepActionExecutor = new InstallStepActionExecutor(
@@ -75,5 +86,7 @@ EOH
             false,
             OutputInterface::OUTPUT_RAW
         );
+
+        return 0;
     }
 }

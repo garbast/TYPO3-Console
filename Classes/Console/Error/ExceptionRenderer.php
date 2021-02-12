@@ -19,6 +19,7 @@ use Helhum\Typo3Console\Mvc\Cli\SubProcessException;
 use Symfony\Component\Console\Application;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 use Symfony\Component\Console\Helper\Helper;
+use Symfony\Component\Console\Output\ConsoleOutput;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Terminal;
 use TYPO3\CMS\Core\Log\LogManager;
@@ -45,6 +46,9 @@ class ExceptionRenderer
      */
     public function render(\Throwable $exception, OutputInterface $output, Application $application = null)
     {
+        if ($output instanceof ConsoleOutput) {
+            $output = $output->getErrorOutput();
+        }
         $this->writeLog($exception);
         if (getenv('TYPO3_CONSOLE_SUB_PROCESS')) {
             $output->write(\json_encode($this->serializeException($exception)), false, OutputInterface::VERBOSITY_QUIET);
@@ -123,8 +127,12 @@ class ExceptionRenderer
      */
     private function outputCode(\Throwable $exception, OutputInterface $output)
     {
-        if ($exception->getCode() > 0) {
-            $output->writeln(sprintf('<comment>Exception code:</comment> <info>%s</info>', $exception->getCode()));
+        $code = $exception->getCode();
+        if ($exception instanceof SubProcessException) {
+            $code = $exception->getPreviousExceptionCode();
+        }
+        if (!empty($code)) {
+            $output->writeln(sprintf('<comment>Exception code:</comment> <info>%s</info>', $code));
             $output->writeln('');
         }
     }
@@ -248,9 +256,6 @@ class ExceptionRenderer
         if (getenv('TYPO3_PATH_ROOT')) {
             $pathPrefixes[] = getenv('TYPO3_PATH_ROOT') . '/';
         }
-        if (defined('PATH_site')) {
-            $pathPrefixes[] = PATH_site;
-        }
         $fileName = str_replace($pathPrefixes, '', $fileName);
         $pathPosition = strpos($fileName, 'typo3conf/ext/');
         $pathAndFilename = ($pathPosition !== false) ? substr($fileName, $pathPosition) : $fileName;
@@ -269,11 +274,13 @@ class ExceptionRenderer
         if ($exception) {
             $exceptionClass = get_class($exception);
             $exceptionMessage = $exception->getMessage();
+            $exceptionCode = $exception->getCode();
             $line = $exception->getLine();
             $file = $exception->getFile();
             if ($exception instanceof SubProcessException) {
                 $exceptionClass = $exception->getPreviousExceptionClass();
                 $exceptionMessage = $exception->getPreviousExceptionMessage();
+                $exceptionCode = $exception->getPreviousExceptionCode();
                 $line = $exception->getPreviousExceptionLine();
                 $file = $exception->getPreviousExceptionFile();
             } elseif ($exception instanceof FailedSubProcessCommandException) {
@@ -289,7 +296,7 @@ class ExceptionRenderer
                 'line' => $line,
                 'file' => $file,
                 'message' => $exceptionMessage,
-                'code' => $exception->getCode(),
+                'code' => $exceptionCode,
                 'trace' => $this->getTrace($exception),
                 'previous' => $this->serializeException($exception->getPrevious()),
                 'commandline' => $commandLine ?? null,
